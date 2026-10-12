@@ -1,0 +1,12 @@
+apiVersion: v2
+name: kawa
+description: Kawa Kafka gateway with Kawa Studio, its admin UI
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kafka
+  - gateway
+  - kawa
+sources:
+  - https://github.com/kawa-platform/kawa-gateway

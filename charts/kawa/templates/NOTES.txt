@@ -1,0 +1,27 @@
+Kawa is installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+{{- if .Values.gateway.enabled }}
+
+Kafka clients connect to the gateway Service on port {{ include "kawa.gateway.kafkaPort" . }}:
+  {{ include "kawa.gateway.advertisedHost" . }}
+Clients outside the cluster need the address the gateway advertises: set advertised.host in gateway.config
+and gateway.service.type to LoadBalancer or NodePort.
+{{- end }}
+{{- if .Values.studio.enabled }}
+
+{{- if .Values.ingress.enabled }}
+
+Kawa Studio: {{ ternary "https" "http" (not (empty .Values.ingress.tls)) }}://{{ .Values.ingress.host }}/admin/
+{{- else }}
+
+Kawa Studio: http://localhost:5173/admin/
+With the default Studio image (API at http://localhost:8080), port-forward both services:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kawa.studio.fullname" . }} 5173:{{ .Values.studio.service.port }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "kawa.gateway.fullname" . }} 8080:{{ include "kawa.gateway.adminPort" . }}
+{{- end }}
+{{- end }}
+{{- $cfg := .Values.gateway.config | default dict }}
+{{- if and .Values.gateway.enabled (eq (dig "admin" "auth" "type" "none" $cfg) "oauth") }}
+
+Log in as {{ dig "admin" "auth" "bootstrapUser" "username" "the bootstrap user in admin.auth.bootstrapUser" $cfg }}. Password:
+  kubectl -n {{ .Release.Namespace }} get secret {{ include "kawa.gateway.secretName" . }} -o jsonpath='{.data.admin-password}' | base64 -d
+{{- end }}
