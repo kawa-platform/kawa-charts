@@ -1,0 +1,33 @@
+{{- if .Values.gateway.enabled }}
+{{- $svc := .Values.gateway.service }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kawa.gateway.fullname" . }}
+  labels:
+    {{- include "kawa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: gateway
+  {{- with $svc.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ $svc.type }}
+  {{- if $svc.loadBalancerIP }}
+  loadBalancerIP: {{ $svc.loadBalancerIP }}
+  {{- end }}
+  {{- if $svc.externalTrafficPolicy }}
+  externalTrafficPolicy: {{ $svc.externalTrafficPolicy }}
+  {{- end }}
+  selector:
+    {{- include "kawa.gateway.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: kafka
+      port: {{ include "kawa.gateway.kafkaPort" . }}
+      targetPort: kafka
+      protocol: TCP
+    - name: admin
+      port: {{ include "kawa.gateway.adminPort" . }}
+      targetPort: admin
+      protocol: TCP
+{{- end }}

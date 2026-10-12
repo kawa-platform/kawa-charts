@@ -1,0 +1,78 @@
+{{- if .Values.studio.enabled }}
+{{- $st := .Values.studio }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kawa.studio.fullname" . }}
+  labels:
+    {{- include "kawa.labels" . | nindent 4 }}
+    app.kubernetes.io/component: studio
+spec:
+  replicas: {{ $st.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "kawa.studio.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "kawa.studio.selectorLabels" . | nindent 8 }}
+        {{- with $st.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with $st.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $st.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: studio
+          image: "{{ $st.image.repository }}:{{ $st.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ $st.image.pullPolicy }}
+          {{- with $st.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            # Where the image's nginx proxies /api/ to (rendered from its config template at start).
+            - name: KAWA_API_UPSTREAM
+              value: {{ $st.apiUpstream | default (printf "http://%s:%s" (include "kawa.gateway.fullname" .) (include "kawa.gateway.adminPort" .)) | trimSuffix "/" | quote }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /admin/
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /admin/
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          {{- with $st.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with $st.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $st.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $st.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

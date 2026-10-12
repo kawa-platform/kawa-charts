@@ -1,0 +1,47 @@
+# Lints and validates every chart on pull requests and pushes to main. Also called by release.yml, so a
+# tagged release is linted the same way before it is published.
+
+name: Helm lint
+
+on:
+  workflow_call:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions: {}
+
+env:
+  KUBECONFORM_VERSION: v0.7.0
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin kubeconform
+
+      - name: Lint and validate
+        run: |
+          # Each chart is rendered with every charts/<chart>/ci/*-values.yaml (the chart-testing convention).
+          for chart in charts/*/; do
+            for values in "$chart"ci/*-values.yaml; do
+              echo "::group::$chart with $values"
+              helm lint "$chart" --values "$values"
+              # kubeconform has no schema for CRDs and custom resources: those are skipped, not failed.
+              helm template ci "$chart" --namespace ci --values "$values" \
+                | kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.33.0
+              echo "::endgroup::"
+            done
+          done
