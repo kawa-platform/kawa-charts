@@ -1,9 +1,9 @@
-# kawa
+# kawa-gateway
 
 Installs **kawa-gateway** and **kawa-studio** together.
 
 ```bash
-helm install kawa ./charts/kawa -f my-values.yaml
+helm install kawa ./charts/kawa-gateway -f my-values.yaml
 ```
 
 `gateway.config` in `my-values.yaml` is the gateway's `config.yaml`, unchanged. The chart mounts it at `/etc/kawa/config.yaml`
