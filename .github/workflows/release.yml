@@ -6,7 +6,7 @@ name: Release
 
 on:
   push:
-    tags: [ 'kawa-*-g*.*.*' ]
+    tags: [ 'kawa-*-*.*.*' ]
 
 permissions: {}
 
