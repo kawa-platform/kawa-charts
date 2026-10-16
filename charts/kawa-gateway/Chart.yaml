@@ -2,7 +2,7 @@ apiVersion: v2
 name: kawa-gateway
 description: Kawa Kafka gateway with Kawa Studio, its admin UI
 type: application
-version: 0.1.0-rc4
+version: 0.1.0-rc5
 appVersion: "0.1.0"
 keywords:
   - kafka
