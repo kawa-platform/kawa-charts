@@ -11,7 +11,7 @@ YELLOW=$'\033[33m'; BLUE=$'\033[34m'; MAGENTA=$'\033[35m'; CYAN=$'\033[36m'; RES
 
 die() { printf '%s❌ %s%s\n' "$RED$BOLD" "$*" "$RESET" >&2; exit 1; }
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")" && pwd)"
 cd "$root"
 
 charts=()
