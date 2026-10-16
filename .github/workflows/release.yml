@@ -15,6 +15,9 @@ env:
 
 jobs:
   lint:
+    # A called workflow can use no more permissions than its caller grants.
+    permissions:
+      contents: read
     uses: ./.github/workflows/helm-lint.yml
 
   publish:
