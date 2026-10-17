@@ -55,3 +55,27 @@ jobs:
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
           helm package "charts/${{ steps.chart.outputs.chart }}" --destination dist
           helm push dist/*.tgz "$REGISTRY"
+
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - uses: azure/setup-helm@v4
+
+      - name: Package the chart and create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="$(sed -E 's/^.*-([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$/\1/' <<<"$TAG")"
+          chart="${TAG%-"$version"}"
+          helm package "charts/$chart" --destination dist
+          args=(--title "$TAG" --generate-notes "$TAG" "dist/$chart-$version.tgz")
+          [[ "$version" == *-* ]] && args+=(--prerelease)
+          gh release create "${args[@]}"
