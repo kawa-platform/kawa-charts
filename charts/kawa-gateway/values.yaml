@@ -76,7 +76,14 @@ gateway:
     readOnlyRootFilesystem: true
     capabilities:
       drop: [ ALL ]
-  resources: { }
+  # Requests reserve capacity for scheduling. The memory limit is what the JVM sizes its heap from
+  # (-XX:MaxRAMPercentage=75). No CPU limit, so the gateway is not throttled.
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
   nodeSelector: { }
   tolerations: [ ]
   affinity: { }
@@ -104,7 +111,12 @@ studio:
   podLabels: { }
   podSecurityContext: { }
   securityContext: { }
-  resources: { }
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
   nodeSelector: { }
   tolerations: [ ]
   affinity: { }
