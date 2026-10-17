@@ -3,7 +3,7 @@ name: kawa-gateway
 description: Kawa Kafka gateway with Kawa Studio, its admin UI
 type: application
 version: 0.1.0-rc6
-appVersion: "0.1.0"
+appVersion: "0.1.0-rc.2"
 keywords:
   - kafka
   - gateway

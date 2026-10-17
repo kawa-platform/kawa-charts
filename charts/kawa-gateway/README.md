@@ -48,7 +48,14 @@ Clients connect to the gateway Service on the listener port. The gateway adverti
 
 ## Images
 
-`gateway.image` / `studio.image` default to the local builds `kawa-gateway:latest` and `kawa-studio:latest`
-(`docker build -t kawa-gateway .` in each repo). Point them at your registry for a real cluster.
+`gateway.image` / `studio.image` default to `ghcr.io/kawa-platform/kawa-gateway` and `kawa-studio`, tagged with the
+chart's `appVersion`, so a chart version pins its images. If the packages are private, set `imagePullSecrets`.
+
+To use local builds (`docker build -t kawa-gateway .` in each repo), override them:
+
+```
+--set gateway.image.repository=kawa-gateway,gateway.image.tag=latest \
+--set studio.image.repository=kawa-studio,studio.image.tag=latest
+```
 
 See [values.yaml](values.yaml) for every option.

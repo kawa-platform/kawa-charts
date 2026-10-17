@@ -34,6 +34,13 @@ read -r version
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
   || die "not a version: $version (expected e.g. 0.2.0 or 0.2.0-rc.1)"
 
+current_app="$(awk '/^appVersion:/ {gsub(/"/, "", $2); print $2}' "charts/$chart/Chart.yaml")"
+printf '%s🖼️  Image tag (appVersion) for %s (current: %s%s%s, must exist on ghcr): %s' \
+  "$CYAN$BOLD" "$chart" "$YELLOW" "$current_app" "$CYAN" "$RESET"
+read -r app_version
+app_version="${app_version:-$current_app}"
+[[ "$app_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "not an image tag: $app_version"
+
 tag="$chart-$version"
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "tag $tag already exists 🏷️"
 
@@ -45,12 +52,14 @@ read -r ok
 [[ "$ok" == y || "$ok" == Y ]] || { printf '%s🛑 cancelled%s\n' "$YELLOW" "$RESET"; exit 1; }
 
 printf '%s✏️  Setting version %s in charts/%s/Chart.yaml...%s\n' "$CYAN" "$version" "$chart" "$RESET"
-python3 - "charts/$chart/Chart.yaml" "$version" <<'PY'
+python3 - "charts/$chart/Chart.yaml" "$version" "$app_version" <<'PY'
 import re, sys
-path, version = sys.argv[1], sys.argv[2]
+path, version, app_version = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(path).read()
 new, n = re.subn(r'^version:.*$', f'version: {version}', text, count=1, flags=re.M)
 assert n == 1, f"no version line in {path}"
+new, n = re.subn(r'^appVersion:.*$', f'appVersion: "{app_version}"', new, count=1, flags=re.M)
+assert n == 1, f"no appVersion line in {path}"
 open(path, 'w').write(new)
 PY
 
