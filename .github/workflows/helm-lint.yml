@@ -36,6 +36,8 @@ jobs:
         run: |
           # Each chart is rendered with every charts/<chart>/ci/*-values.yaml (the chart-testing convention).
           for chart in charts/*/; do
+            # Pulls in file:// subcharts (the kawa umbrella); a no-op for charts without dependencies.
+            helm dependency update "$chart" >/dev/null
             for values in "$chart"ci/*-values.yaml; do
               echo "::group::$chart with $values"
               helm lint "$chart" --values "$values"

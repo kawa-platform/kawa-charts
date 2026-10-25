@@ -1,0 +1,13 @@
+apiVersion: v2
+name: kawa-operator
+description: Kawa operator, which manages a kawa gateway through Kubernetes custom resources
+type: application
+version: 0.1.0-rc1
+appVersion: "0.1.0-rc.1"
+keywords:
+  - kafka
+  - gateway
+  - kawa
+  - operator
+sources:
+  - https://github.com/kawa-platform/kawa-operator

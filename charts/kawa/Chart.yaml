@@ -1,0 +1,22 @@
+apiVersion: v2
+name: kawa
+description: Kawa in one chart - the gateway with Kawa Studio, and the operator. Pins each component's image.
+type: application
+# Set by scripts/release.sh (make release) on every release.
+version: 0.0.0
+keywords:
+  - kafka
+  - gateway
+  - kawa
+sources:
+  - https://github.com/kawa-platform/kawa-charts
+dependencies:
+  # Any version of the sibling chart: the umbrella pins images, not subchart versions.
+  - name: kawa-gateway
+    version: ">=0.0.0-0"
+    repository: file://../kawa-gateway
+    condition: kawa-gateway.enabled
+  - name: kawa-operator
+    version: ">=0.0.0-0"
+    repository: file://../kawa-operator
+    condition: kawa-operator.enabled
