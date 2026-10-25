@@ -8,12 +8,12 @@ kawa-gateway:
   enabled: true
   gateway:
     image:
-      tag: "0.1.0-rc.2"  # kawa-release: gateway
+      tag: "0.1.0-rc.3"  # kawa-release: gateway
   studio:
     image:
-      tag: "0.1.0-rc.2"  # kawa-release: studio
+      tag: "0.1.0-rc.3"  # kawa-release: studio
 
 kawa-operator:
   enabled: true
   image:
-    tag: "0.1.0-rc.1"  # kawa-release: operator
+    tag: "0.1.0-rc.2"  # kawa-release: operator
