@@ -3,7 +3,7 @@ name: kawa
 description: Kawa in one chart - the gateway with Kawa Studio, and the operator. Pins each component's image.
 type: application
 # Set by scripts/release.sh (make release) on every release.
-version: 0.1.0-rc.1
+version: 0.1.0-rc.2
 keywords:
   - kafka
   - gateway
