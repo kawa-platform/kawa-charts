@@ -57,7 +57,9 @@ next_version() {
 # unreleased <dir> <tag-glob>: latest matching tag on origin/main (or "none") and the commits after it.
 unreleased() {
   local latest
-  latest="$(git -C "$1" describe --tags --abbrev=0 --match "$2" origin/main 2>/dev/null || echo none)"
+  # Highest version tagged on main; versionsort.suffix sorts x.y.z-rc.N before x.y.z.
+  latest="$(git -C "$1" -c versionsort.suffix=-rc tag -l "$2" --merged origin/main --sort=-v:refname | sed -n 1p)"
+  latest=${latest:-none}
   printf '%s %s\n' "$latest" "$(git -C "$1" rev-list --count "$(since "$latest")")"
 }
 
@@ -65,13 +67,14 @@ unreleased() {
 since() { if [[ $1 == none ]]; then echo origin/main; else echo "$1..origin/main"; fi; }
 
 # ask <name> <dir> <latest> <unreleased> <can-skip 0|1> [<next-rc-tag>]:
-# sets BUMP (major|minor|patch|rc|skip) and RC (0|1).
+# sets BUMP (major|minor|patch|rc|use|skip), RC (0|1) and, for use, PIN.
 # [r] is offered when <next-rc-tag> is given and continues that release-candidate line.
+# [u]se (components only) pins an already tagged version without releasing; asks until the tag exists.
 # [l]ist prints the unreleased commits and asks again.
 ask() {
   local name=$1 dir=$2 latest=$3 count=$4 can_skip=$5 next_rc=${6:-} choices='[M]ajor [m]inor [p]atch' a
   if [[ -n $next_rc ]]; then choices+=" [r]c → $next_rc"; fi
-  if [[ $can_skip == 1 ]]; then choices+=' [s]kip'; fi
+  if [[ $can_skip == 1 ]]; then choices+=' [u]se existing [s]kip'; fi
   choices+=' [l]ist'
   BUMP=; RC=0
   while [[ -z $BUMP ]]; do
@@ -84,6 +87,21 @@ ask() {
       p) BUMP=patch ;;
       r) if [[ -n $next_rc ]]; then BUMP=rc; RC=1; return 0; fi ;;
       s) if [[ $can_skip == 1 ]]; then BUMP=skip; return 0; fi ;;
+      u) if [[ $can_skip == 1 ]]; then
+           while :; do
+             if [[ $latest == none ]]; then
+               printf '   %sversion to pin:%s ' "$CYAN" "$RESET"
+               read -r a
+             else
+               printf '   %sversion to pin (enter for %s):%s ' "$CYAN" "$latest" "$RESET"
+               read -r a
+               a=${a:-$latest}
+             fi
+             a=${a#v}
+             if [[ -n $a ]] && has_tag "$dir" "v$a"; then BUMP=use; PIN=$a; return 0; fi
+             printf '   %s👉 no tag v%s in %s; enter an existing version%s\n' "$YELLOW" "$a" "$name" "$RESET"
+           done
+         fi ;;
       l) git -C "$dir" --no-pager log --oneline --no-decorate "$(since "$latest")" | sed 's/^/     /'
          continue ;;
     esac
@@ -147,7 +165,8 @@ done
 
 # 🎯 Ask what to release.
 printf '\n%s🎯 What do you want to release?%s\n' "$MAGENTA$BOLD" "$RESET"
-SELECTED=(); NEXT=(); LATEST=()
+SELECTED=(); NEXT=(); LATEST=()   # components to release
+PINNED=(); PIN_TO=()              # components only re-pinned to an existing version
 for c in "${COMPONENTS[@]}"; do
   dir="$KAWA_ROOT/kawa-$c"
   read -r latest count <<<"$(unreleased "$dir" 'v[0-9]*')"
@@ -155,6 +174,7 @@ for c in "${COMPONENTS[@]}"; do
   if [[ $latest == *-rc* ]]; then next_rc="v$(versions "$dir" v | next_version rc 1)"; fi
   ask "$c" "$dir" "$latest" "$count" 1 "$next_rc"
   if [[ $BUMP == skip ]]; then continue; fi
+  if [[ $BUMP == use ]]; then PINNED+=("$c"); PIN_TO+=("$PIN"); continue; fi
   SELECTED+=("$c"); LATEST+=("$latest")
   NEXT+=("$(versions "$dir" v | next_version "$BUMP" "$RC")")
 done
@@ -191,6 +211,11 @@ for ((i = 0; i < ${#SELECTED[@]}; i++)); do
   printf '   %-14s %s → %s%s%s%s\n' "kawa-${SELECTED[$i]}" "${LATEST[$i]}" "$GREEN$BOLD" "v${NEXT[$i]}" "$RESET" \
     "$(below "$KAWA_ROOT/kawa-${SELECTED[$i]}" v "${NEXT[$i]}")"
 done
+for ((i = 0; i < ${#PINNED[@]}; i++)); do
+  current="$(sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: ${PINNED[$i]}\$/\1/p" "$CHART_DIR/values.yaml")"
+  printf '   %-14s pin %s → %s%s%s %s(no release)%s\n' "kawa-${PINNED[$i]}" "${current:-none}" \
+    "$GREEN$BOLD" "${PIN_TO[$i]}" "$RESET" "$DIM" "$RESET"
+done
 printf '   %-14s %s → %s%s%s%s\n' "chart $CHART" "$chart_latest" "$GREEN$BOLD" "$chart_tag" "$RESET" \
   "$(below . "$CHART-" "$chart_next")"
 printf '\n%s🤔 Tag and push all of this to origin? [y/N] %s' "$MAGENTA$BOLD" "$RESET"
@@ -206,10 +231,11 @@ for ((i = 0; i < ${#SELECTED[@]}; i++)); do
   wait_release "$ORG/kawa-$c" "v${NEXT[$i]}"
 done
 
-# 📌 Then the chart: pin what was released, bump its version, tag and push.
+# 📌 Then the chart: pin what was released or picked with [u]se, bump its version, tag and push.
 printf '\n%s📌 Releasing chart %s%s\n' "$BLUE$BOLD" "$chart_tag" "$RESET"
 pins=()
 for ((i = 0; i < ${#SELECTED[@]}; i++)); do pins+=("${SELECTED[$i]}=${NEXT[$i]}"); done
+for ((i = 0; i < ${#PINNED[@]}; i++)); do pins+=("${PINNED[$i]}=${PIN_TO[$i]}"); done
 python3 - "$CHART_DIR" "$chart_next" ${pins[@]+"${pins[@]}"} <<'PY'
 import re, sys
 chart_dir, version, pins = sys.argv[1], sys.argv[2], sys.argv[3:]
