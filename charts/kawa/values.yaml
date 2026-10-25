@@ -1,8 +1,9 @@
 # Values for the kawa umbrella chart. Everything under kawa-gateway / kawa-operator is passed to that
-# subchart; see charts/kawa-gateway/values.yaml and charts/kawa-operator/values.yaml for the options.
+# subchart; see charts/kawa-gateway/values.yaml here and charts/kawa-operator/values.yaml in kawa-operator.
 #
-# Each image is pinned on a line marked `# kawa-release: <component>`. `make release` rewrites those
-# lines with the versions it just released, so keep each marker on the same line as its tag.
+# Each component is pinned on a line marked `# kawa-release: <component>`: the gateway and studio image tags
+# here, the kawa-operator chart version in Chart.yaml. `make release` rewrites those lines with the versions it
+# just released, so keep each marker on the same line as its tag or version.
 
 kawa-gateway:
   enabled: true
@@ -15,5 +16,3 @@ kawa-gateway:
 
 kawa-operator:
   enabled: true
-  image:
-    tag: "0.1.0-rc.2"  # kawa-release: operator

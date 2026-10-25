@@ -8,8 +8,10 @@
 #   make release
 #
 # Component checkouts are expected next to this repo (override with KAWA_ROOT).
-# charts/kawa/values.yaml pins each image on one marked line, which is what gets rewritten:
+# charts/kawa pins each component on one marked line, which is what gets rewritten: an image tag in
+# values.yaml, or (operator) the kawa-operator chart version in Chart.yaml's dependencies:
 #   tag: "0.1.0"  # kawa-release: gateway
+#   version: "0.1.0"  # kawa-release: operator
 #
 # Written for the bash 3.2 that ships with macOS.
 set -euo pipefail
@@ -25,6 +27,7 @@ ORG=kawa-platform
 COMPONENTS=(gateway studio operator)
 CHART=kawa
 CHART_DIR=charts/$CHART
+PIN_FILES=("$CHART_DIR/values.yaml" "$CHART_DIR/Chart.yaml")
 
 # versions <dir> <prefix>: versions of the tags <prefix><x.y.z[-rc.N]>, old -rcN written as -rc.N.
 versions() {
@@ -125,9 +128,9 @@ check_repo() {
 # has_tag <dir> <tag>
 has_tag() { git -C "$1" rev-parse -q --verify "refs/tags/$2" >/dev/null; }
 
-# pin_of <component>: the image tag charts/kawa/values.yaml pins for <component>.
+# pin_of <component>: the version charts/kawa pins for <component> (image tag or chart version).
 pin_of() {
-  sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\1/p" "$CHART_DIR/values.yaml"
+  sed -nE "s/.*(tag|version):[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\2/p" "${PIN_FILES[@]}"
 }
 
 # update_demo <dir>: writes the chart's pins (and the chart version, if the demo uses this chart) to
@@ -197,8 +200,8 @@ KAWA_ROOT="${KAWA_ROOT:-$(cd "$root/.." && pwd)}"
 gh auth status >/dev/null 2>&1 || die "gh is not logged in; run gh auth login"
 [[ -f $CHART_DIR/Chart.yaml ]] || die "$CHART_DIR/Chart.yaml not found; the umbrella chart is needed first"
 for c in "${COMPONENTS[@]}"; do
-  grep -Eq "^[[:space:]]*tag:[[:space:]]*\"[^\"]*\"[[:space:]]*# kawa-release: $c\$" "$CHART_DIR/values.yaml" \
-    || die "$CHART_DIR/values.yaml has no pin line for $c (expected: tag: \"x.y.z\"  # kawa-release: $c)"
+  grep -Eq "^[[:space:]]*(tag|version):[[:space:]]*\"[^\"]*\"[[:space:]]*# kawa-release: $c\$" "${PIN_FILES[@]}" \
+    || die "$CHART_DIR has no pin line for $c (expected: tag: \"x.y.z\"  # kawa-release: $c)"
 done
 
 info "🔄 Fetching tags..."
@@ -293,14 +296,19 @@ text, n = re.subn(r'^version:.*$', f'version: {version}', text, count=1, flags=r
 assert n == 1, f"no version line in {path}"
 open(path, 'w').write(text)
 
-path = f"{chart_dir}/values.yaml"
-text = open(path).read()
+# Pin lines: image tags in values.yaml, the kawa-operator chart version in Chart.yaml.
+paths = [f"{chart_dir}/values.yaml", f"{chart_dir}/Chart.yaml"]
+texts = {p: open(p).read() for p in paths}
 for pin in pins:
     name, tag = pin.split('=', 1)
-    pattern = rf'^(\s*tag:\s*)"[^"]*"(\s*# kawa-release: {re.escape(name)})$'
-    text, n = re.subn(pattern, rf'\g<1>"{tag}"\g<2>', text, flags=re.M)
-    assert n == 1, f"expected one pin line for {name} in {path}, found {n}"
-open(path, 'w').write(text)
+    pattern = rf'^(\s*(?:tag|version):\s*)"[^"]*"(\s*# kawa-release: {re.escape(name)})$'
+    found = 0
+    for p in paths:
+        texts[p], n = re.subn(pattern, rf'\g<1>"{tag}"\g<2>', texts[p], flags=re.M)
+        found += n
+    assert found == 1, f"expected one pin line for {name} in {chart_dir}, found {found}"
+for p in paths:
+    open(p, 'w').write(texts[p])
 PY
 
 # 📦 Commit only the chart files, whatever else is changed in the working tree.
