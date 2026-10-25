@@ -3,6 +3,7 @@
 # releases them one at a time with their own `make release VERSION=…` and waits for each Release
 # workflow to pass. Then pins the released versions in charts/kawa, bumps its version, commits, tags
 # kawa-<version> and pushes, which starts .github/workflows/release.yml.
+# Finally offers to write the new versions to kawa-demo/versions.env, commit and push it.
 #
 #   make release
 #
@@ -124,6 +125,52 @@ check_repo() {
 # has_tag <dir> <tag>
 has_tag() { git -C "$1" rev-parse -q --verify "refs/tags/$2" >/dev/null; }
 
+# pin_of <component>: the image tag charts/kawa/values.yaml pins for <component>.
+pin_of() {
+  sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\1/p" "$CHART_DIR/values.yaml"
+}
+
+# update_demo <dir>: writes the chart's pins (and the chart version, if the demo uses this chart) to
+# <dir>/versions.env, then commits only that file and pushes main. Warns and returns on a problem,
+# since the releases themselves are done by then.
+update_demo() {
+  local dir=$1 sets=() chart
+  warn() { printf '%s⚠️  kawa-demo not updated: %s%s\n' "$YELLOW$BOLD" "$*" "$RESET"; }
+  git -C "$dir" fetch -q origin main || { warn "fetch failed"; return 0; }
+  git -C "$dir" diff --quiet HEAD -- versions.env || { warn "versions.env has uncommitted changes"; return 0; }
+  [[ "$(git -C "$dir" rev-parse HEAD)" == "$(git -C "$dir" rev-parse origin/main)" ]] \
+    || { warn "it is not on origin/main; check out main and pull"; return 0; }
+
+  sets+=("GATEWAY_VERSION=$(pin_of gateway)" "STUDIO_VERSION=$(pin_of studio)")
+  if grep -q '^OPERATOR_VERSION=' "$dir/versions.env"; then sets+=("OPERATOR_VERSION=$(pin_of operator)"); fi
+  chart="$(sed -n 's/^KAWA_CHART=//p' "$dir/versions.env")"
+  if [[ $chart == */charts/$CHART ]]; then
+    sets+=("KAWA_CHART_VERSION=$chart_next")
+  else
+    info "ℹ️  KAWA_CHART_VERSION left alone: the demo's KAWA_CHART is $chart, not the $CHART chart"
+  fi
+
+  python3 - "$dir/versions.env" "${sets[@]}" <<'PY'
+import re, sys
+path, sets = sys.argv[1], sys.argv[2:]
+text = open(path).read()
+for s in sets:
+    key, value = s.split('=', 1)
+    text, n = re.subn(rf'^{key}=.*$', f'{key}={value}', text, count=1, flags=re.M)
+    assert n == 1, f"no {key}= line in {path}"
+open(path, 'w').write(text)
+PY
+
+  if git -C "$dir" diff --quiet -- versions.env; then
+    info "✅ kawa-demo versions.env is already up to date"
+    return 0
+  fi
+  git -C "$dir" --no-pager diff -U0 -- versions.env | sed -n 's/^\([-+][A-Z]\)/   \1/p'
+  git -C "$dir" commit -q -m "chore: kawa $chart_next versions" -- versions.env
+  git -C "$dir" push -q origin main || { warn "push failed; the commit is local in $dir"; return 0; }
+  printf '%s✅ kawa-demo versions.env committed and pushed%s\n' "$GREEN$BOLD" "$RESET"
+}
+
 # wait_release <github-repo> <tag>: waits for the Release run of <tag>; exits if it fails.
 wait_release() {
   local id='' i url
@@ -212,7 +259,7 @@ for ((i = 0; i < ${#SELECTED[@]}; i++)); do
     "$(below "$KAWA_ROOT/kawa-${SELECTED[$i]}" v "${NEXT[$i]}")"
 done
 for ((i = 0; i < ${#PINNED[@]}; i++)); do
-  current="$(sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: ${PINNED[$i]}\$/\1/p" "$CHART_DIR/values.yaml")"
+  current="$(pin_of "${PINNED[$i]}")"
   printf '   %-14s pin %s → %s%s%s %s(no release)%s\n' "kawa-${PINNED[$i]}" "${current:-none}" \
     "$GREEN$BOLD" "${PIN_TO[$i]}" "$RESET" "$DIM" "$RESET"
 done
@@ -265,3 +312,11 @@ wait_release "$ORG/kawa-charts" "$chart_tag"
 
 printf '\n%s🎉 Released%s\n' "$GREEN$BOLD" "$RESET"
 for r in "${RESULTS[@]}"; do printf '   %s\n' "$r"; done
+
+# 🎪 Optionally carry the chart's pins over to kawa-demo/versions.env.
+demo="$KAWA_ROOT/kawa-demo"
+if [[ -f $demo/versions.env ]]; then
+  printf '\n%s🎪 Update kawa-demo versions.env with these versions, commit and push? [y/N] %s' "$MAGENTA$BOLD" "$RESET"
+  read -r ok
+  if [[ $ok == y || $ok == Y ]]; then update_demo "$demo"; fi
+fi
