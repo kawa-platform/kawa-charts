@@ -20,6 +20,7 @@ jobs:
     # A called workflow can use no more permissions than its caller grants.
     permissions:
       contents: read
+      packages: read
     uses: ./.github/workflows/helm-lint.yml
 
   publish:
@@ -63,6 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      packages: read
     steps:
       - uses: actions/checkout@v5
         with:
@@ -77,6 +79,8 @@ jobs:
         run: |
           version="$(sed -E 's/^.*-([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$/\1/' <<<"$TAG")"
           chart="${TAG%-"$version"}"
+          # The kawa chart's kawa-operator dependency is a private ghcr package.
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
           helm package --dependency-update "charts/$chart" --destination dist
           args=(--title "$TAG" --generate-notes "$TAG" "dist/$chart-$version.tgz")
           [[ "$version" == *-* ]] && args+=(--prerelease)
