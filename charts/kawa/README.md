@@ -1,9 +1,9 @@
-# kawa-gateway
+# kawa
 
 Installs **kawa-gateway** and **kawa-studio** together.
 
 ```bash
-helm install kawa ./charts/kawa-gateway -f my-values.yaml
+helm install kawa ./charts/kawa -f my-values.yaml
 ```
 
 `gateway.config` in `my-values.yaml` is the gateway's `config.yaml`, unchanged. The chart mounts it at `/etc/kawa/config.yaml`
@@ -49,7 +49,7 @@ Clients connect to the gateway Service on the listener port. The gateway adverti
 ## Images
 
 `gateway.image` / `studio.image` default to `ghcr.io/kawa-platform/kawa-gateway` and `kawa-studio`, tagged with the
-chart's `appVersion`, so a chart version pins its images. If the packages are private, set `imagePullSecrets`.
+versions pinned in `values.yaml`, so a chart version pins its images. If the packages are private, set `imagePullSecrets`.
 
 To use local builds (`docker build -t kawa-gateway .` in each repo), override them:
 

@@ -1,26 +1,24 @@
-# Publishes a chart when a tag `<chart>-<version>` (e.g. kawa-0.2.0 or kawa-0.2.0-rc.1) is pushed. The
-# version must match that chart's Chart.yaml; the chart is linted first (helm-lint.yml), then pushed to
-# oci://ghcr.io/<owner>/charts/<chart>.
+# Publishes the kawa chart when a tag `kawa-<version>` (e.g. kawa-0.2.0 or kawa-0.2.0-rc.1) is pushed by
+# scripts/release.sh. The version must match charts/kawa/Chart.yaml; the chart is linted first
+# (helm-lint.yml), then pushed to oci://ghcr.io/<owner>/charts/kawa.
 
 name: Release
 
 on:
   push:
-    # The first pattern matches component charts (kawa-gateway-0.1.0), the second the umbrella
-    # chart (kawa-0.2.0, kawa-0.2.0-rc.1), whose version follows the kawa- prefix directly.
-    tags: [ 'kawa-*-*.*.*', 'kawa-[0-9]*.*.*' ]
+    tags: [ 'kawa-[0-9]*.*.*' ]
 
 permissions: {}
 
 env:
   REGISTRY: oci://ghcr.io/${{ github.repository_owner }}/charts
+  CHART: kawa
 
 jobs:
   lint:
     # A called workflow can use no more permissions than its caller grants.
     permissions:
       contents: read
-      packages: read
     uses: ./.github/workflows/helm-lint.yml
 
   publish:
@@ -36,27 +34,22 @@ jobs:
 
       - uses: azure/setup-helm@v4
 
-      - name: Resolve chart and version from the tag
-        id: chart
+      - name: Check the tag against Chart.yaml
         run: |
-          tag="${GITHUB_REF_NAME}"
-          version="$(sed -E 's/^.*-([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$/\1/' <<<"$tag")"
-          chart="${tag%-"$version"}"
-          if [[ ! -f "charts/$chart/Chart.yaml" ]]; then
-            echo "::error::Tag $tag names no chart (expected <chart>-<version>, e.g. kawa-gateway-0.1.0)"
-            exit 1
-          fi
-          chart_version="$(helm show chart "charts/$chart" | awk '/^version:/ {print $2}')"
+          version="${GITHUB_REF_NAME#"$CHART"-}"
+          chart_version="$(helm show chart "charts/$CHART" | awk '/^version:/ {print $2}')"
           if [[ "$chart_version" != "$version" ]]; then
-            echo "::error::Tag $tag does not match charts/$chart/Chart.yaml version $chart_version"
+            echo "::error::Tag $GITHUB_REF_NAME does not match charts/$CHART/Chart.yaml version $chart_version"
             exit 1
           fi
-          echo "chart=$chart" >> "$GITHUB_OUTPUT"
 
       - name: Package and push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
-          helm package --dependency-update "charts/${{ steps.chart.outputs.chart }}" --destination dist
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
+          helm package "charts/$CHART" --destination dist
           helm push dist/*.tgz "$REGISTRY"
 
   github-release:
@@ -64,7 +57,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: read
     steps:
       - uses: actions/checkout@v5
         with:
@@ -77,11 +69,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          version="$(sed -E 's/^.*-([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$/\1/' <<<"$TAG")"
-          chart="${TAG%-"$version"}"
-          # The kawa chart's kawa-operator dependency is a private ghcr package.
-          echo "$GH_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
-          helm package --dependency-update "charts/$chart" --destination dist
-          args=(--title "$TAG" --generate-notes "$TAG" "dist/$chart-$version.tgz")
+          version="${TAG#"$CHART"-}"
+          helm package "charts/$CHART" --destination dist
+          args=(--title "$TAG" --generate-notes "$TAG" "dist/$CHART-$version.tgz")
           [[ "$version" == *-* ]] && args+=(--prerelease)
           gh release create "${args[@]}"

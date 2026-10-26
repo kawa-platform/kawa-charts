@@ -1,4 +1,4 @@
-# Lints and validates every chart on pull requests and pushes to main. Also called by release.yml, so a
+# Lints and validates the chart on pull requests and pushes to main. Also called by release.yml, so a
 # tagged release is linted the same way before it is published.
 
 name: Helm lint
@@ -20,8 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      # The kawa chart's kawa-operator dependency is a private ghcr package.
-      packages: read
     steps:
       - uses: actions/checkout@v5
         with:
@@ -34,18 +32,10 @@ jobs:
           curl -sSfL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
             | sudo tar -xz -C /usr/local/bin kubeconform
 
-      - name: Log in to ghcr.io
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ACTOR: ${{ github.actor }}
-        run: echo "$GH_TOKEN" | helm registry login ghcr.io --username "$ACTOR" --password-stdin
-
       - name: Lint and validate
         run: |
           # Each chart is rendered with every charts/<chart>/ci/*-values.yaml (the chart-testing convention).
           for chart in charts/*/; do
-            # Pulls in file:// subcharts (the kawa umbrella); a no-op for charts without dependencies.
-            helm dependency update "$chart" >/dev/null
             for values in "$chart"ci/*-values.yaml; do
               echo "::group::$chart with $values"
               helm lint "$chart" --values "$values"

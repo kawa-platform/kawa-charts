@@ -1,6 +1,6 @@
 apiVersion: v2
 name: kawa
-description: Kawa in one chart - the gateway with Kawa Studio, and the operator. Pins each component's image.
+description: Kawa, a Kafka gateway, with Kawa Studio, its admin UI. Pins each component's image.
 type: application
 # Set by scripts/release.sh (make release) on every release.
 version: 0.1.0-rc.4
@@ -10,13 +10,3 @@ keywords:
   - kawa
 sources:
   - https://github.com/kawa-platform/kawa-charts
-dependencies:
-  - name: kawa-gateway
-    version: ">=0.0.0-0"
-    repository: file://../kawa-gateway
-    condition: kawa-gateway.enabled
-  # Published by each kawa-operator release, with the operator's version; it pins the operator image.
-  - name: kawa-operator
-    version: "0.1.0-rc.3"  # kawa-release: operator
-    repository: oci://ghcr.io/kawa-platform/charts
-    condition: kawa-operator.enabled

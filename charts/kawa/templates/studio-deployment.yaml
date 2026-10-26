@@ -34,7 +34,7 @@ spec:
       {{- end }}
       containers:
         - name: studio
-          image: "{{ $st.image.repository }}:{{ $st.image.tag | default .Chart.AppVersion }}"
+          image: "{{ $st.image.repository }}:{{ required "studio.image.tag is required" $st.image.tag }}"
           imagePullPolicy: {{ $st.image.pullPolicy }}
           {{- with $st.securityContext }}
           securityContext:

@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 # 🚀 Releases kawa. Asks which components (gateway, studio, operator) to release and how to bump each,
 # releases them one at a time with their own `make release VERSION=…` and waits for each Release
-# workflow to pass. Then pins the released versions in charts/kawa, bumps its version, commits, tags
-# kawa-<version> and pushes, which starts .github/workflows/release.yml.
+# workflow to pass. Then pins the released gateway and studio versions in charts/kawa, bumps its
+# version, commits, tags kawa-<version> and pushes, which starts .github/workflows/release.yml.
+# The operator is not part of charts/kawa: its release publishes its own kawa-operator chart.
 # Finally offers to write the new versions to kawa-demo/versions.env, commit and push it.
 #
 #   make release
 #
 # Component checkouts are expected next to this repo (override with KAWA_ROOT).
-# charts/kawa pins each component on one marked line, which is what gets rewritten: an image tag in
-# values.yaml, or (operator) the kawa-operator chart version in Chart.yaml's dependencies:
+# charts/kawa/values.yaml pins each image on one marked line, which is what gets rewritten:
 #   tag: "0.1.0"  # kawa-release: gateway
-#   version: "0.1.0"  # kawa-release: operator
 #
 # Written for the bash 3.2 that ships with macOS.
 set -euo pipefail
@@ -25,9 +24,13 @@ info() { printf '%s%s%s\n' "$CYAN" "$*" "$RESET"; }
 
 ORG=kawa-platform
 COMPONENTS=(gateway studio operator)
+CHART_PINS=(gateway studio)       # components whose image charts/kawa pins
 CHART=kawa
 CHART_DIR=charts/$CHART
-PIN_FILES=("$CHART_DIR/values.yaml" "$CHART_DIR/Chart.yaml")
+PIN_FILES=("$CHART_DIR/values.yaml")
+
+# in_chart <component>: whether charts/kawa pins <component>.
+in_chart() { local p; for p in "${CHART_PINS[@]}"; do [[ $p == "$1" ]] && return 0; done; return 1; }
 
 # versions <dir> <prefix>: versions of the tags <prefix><x.y.z[-rc.N]>, old -rcN written as -rc.N.
 versions() {
@@ -128,9 +131,9 @@ check_repo() {
 # has_tag <dir> <tag>
 has_tag() { git -C "$1" rev-parse -q --verify "refs/tags/$2" >/dev/null; }
 
-# pin_of <component>: the version charts/kawa pins for <component> (image tag or chart version).
+# pin_of <component>: the image tag charts/kawa pins for <component>.
 pin_of() {
-  sed -nE "s/.*(tag|version):[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\2/p" "${PIN_FILES[@]}"
+  sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\1/p" "${PIN_FILES[@]}"
 }
 
 # update_demo <dir>: writes the chart's pins (and the chart version, if the demo uses this chart) to
@@ -145,7 +148,9 @@ update_demo() {
     || { warn "it is not on origin/main; check out main and pull"; return 0; }
 
   sets+=("GATEWAY_VERSION=$(pin_of gateway)" "STUDIO_VERSION=$(pin_of studio)")
-  if grep -q '^OPERATOR_VERSION=' "$dir/versions.env"; then sets+=("OPERATOR_VERSION=$(pin_of operator)"); fi
+  if [[ -n $operator_version ]] && grep -q '^OPERATOR_VERSION=' "$dir/versions.env"; then
+    sets+=("OPERATOR_VERSION=$operator_version")
+  fi
   chart="$(sed -n 's/^KAWA_CHART=//p' "$dir/versions.env")"
   if [[ $chart == */charts/$CHART ]]; then
     sets+=("KAWA_CHART_VERSION=$chart_next")
@@ -198,9 +203,9 @@ cd "$root"
 KAWA_ROOT="${KAWA_ROOT:-$(cd "$root/.." && pwd)}"
 
 gh auth status >/dev/null 2>&1 || die "gh is not logged in; run gh auth login"
-[[ -f $CHART_DIR/Chart.yaml ]] || die "$CHART_DIR/Chart.yaml not found; the umbrella chart is needed first"
-for c in "${COMPONENTS[@]}"; do
-  grep -Eq "^[[:space:]]*(tag|version):[[:space:]]*\"[^\"]*\"[[:space:]]*# kawa-release: $c\$" "${PIN_FILES[@]}" \
+[[ -f $CHART_DIR/Chart.yaml ]] || die "$CHART_DIR/Chart.yaml not found"
+for c in "${CHART_PINS[@]}"; do
+  grep -Eq "^[[:space:]]*tag:[[:space:]]*\"[^\"]*\"[[:space:]]*# kawa-release: $c\$" "${PIN_FILES[@]}" \
     || die "$CHART_DIR has no pin line for $c (expected: tag: \"x.y.z\"  # kawa-release: $c)"
 done
 
@@ -217,6 +222,7 @@ done
 printf '\n%s🎯 What do you want to release?%s\n' "$MAGENTA$BOLD" "$RESET"
 SELECTED=(); NEXT=(); LATEST=()   # components to release
 PINNED=(); PIN_TO=()              # components only re-pinned to an existing version
+operator_version=''               # the operator version for kawa-demo: released or picked with [u]se
 for c in "${COMPONENTS[@]}"; do
   dir="$KAWA_ROOT/kawa-$c"
   read -r latest count <<<"$(unreleased "$dir" 'v[0-9]*')"
@@ -224,9 +230,14 @@ for c in "${COMPONENTS[@]}"; do
   if [[ $latest == *-rc* ]]; then next_rc="v$(versions "$dir" v | next_version rc 1)"; fi
   ask "$c" "$dir" "$latest" "$count" 1 "$next_rc"
   if [[ $BUMP == skip ]]; then continue; fi
-  if [[ $BUMP == use ]]; then PINNED+=("$c"); PIN_TO+=("$PIN"); continue; fi
+  if [[ $BUMP == use ]]; then
+    PINNED+=("$c"); PIN_TO+=("$PIN")
+    if [[ $c == operator ]]; then operator_version=$PIN; fi
+    continue
+  fi
   SELECTED+=("$c"); LATEST+=("$latest")
   NEXT+=("$(versions "$dir" v | next_version "$BUMP" "$RC")")
+  if [[ $c == operator ]]; then operator_version=${NEXT[${#NEXT[@]}-1]}; fi
 done
 
 read -r latest count <<<"$(unreleased . "$CHART-[0-9]*")"
@@ -262,9 +273,14 @@ for ((i = 0; i < ${#SELECTED[@]}; i++)); do
     "$(below "$KAWA_ROOT/kawa-${SELECTED[$i]}" v "${NEXT[$i]}")"
 done
 for ((i = 0; i < ${#PINNED[@]}; i++)); do
-  current="$(pin_of "${PINNED[$i]}")"
-  printf '   %-14s pin %s → %s%s%s %s(no release)%s\n' "kawa-${PINNED[$i]}" "${current:-none}" \
-    "$GREEN$BOLD" "${PIN_TO[$i]}" "$RESET" "$DIM" "$RESET"
+  if in_chart "${PINNED[$i]}"; then
+    current="$(pin_of "${PINNED[$i]}")"
+    printf '   %-14s pin %s → %s%s%s %s(no release)%s\n' "kawa-${PINNED[$i]}" "${current:-none}" \
+      "$GREEN$BOLD" "${PIN_TO[$i]}" "$RESET" "$DIM" "$RESET"
+  else
+    printf '   %-14s use %s%s%s %s(no release, for kawa-demo)%s\n' "kawa-${PINNED[$i]}" \
+      "$GREEN$BOLD" "${PIN_TO[$i]}" "$RESET" "$DIM" "$RESET"
+  fi
 done
 printf '   %-14s %s → %s%s%s%s\n' "chart $CHART" "$chart_latest" "$GREEN$BOLD" "$chart_tag" "$RESET" \
   "$(below . "$CHART-" "$chart_next")"
@@ -284,8 +300,12 @@ done
 # 📌 Then the chart: pin what was released or picked with [u]se, bump its version, tag and push.
 printf '\n%s📌 Releasing chart %s%s\n' "$BLUE$BOLD" "$chart_tag" "$RESET"
 pins=()
-for ((i = 0; i < ${#SELECTED[@]}; i++)); do pins+=("${SELECTED[$i]}=${NEXT[$i]}"); done
-for ((i = 0; i < ${#PINNED[@]}; i++)); do pins+=("${PINNED[$i]}=${PIN_TO[$i]}"); done
+for ((i = 0; i < ${#SELECTED[@]}; i++)); do
+  if in_chart "${SELECTED[$i]}"; then pins+=("${SELECTED[$i]}=${NEXT[$i]}"); fi
+done
+for ((i = 0; i < ${#PINNED[@]}; i++)); do
+  if in_chart "${PINNED[$i]}"; then pins+=("${PINNED[$i]}=${PIN_TO[$i]}"); fi
+done
 python3 - "$CHART_DIR" "$chart_next" ${pins[@]+"${pins[@]}"} <<'PY'
 import re, sys
 chart_dir, version, pins = sys.argv[1], sys.argv[2], sys.argv[3:]
@@ -296,12 +316,12 @@ text, n = re.subn(r'^version:.*$', f'version: {version}', text, count=1, flags=r
 assert n == 1, f"no version line in {path}"
 open(path, 'w').write(text)
 
-# Pin lines: image tags in values.yaml, the kawa-operator chart version in Chart.yaml.
-paths = [f"{chart_dir}/values.yaml", f"{chart_dir}/Chart.yaml"]
+# Pin lines: image tags in values.yaml.
+paths = [f"{chart_dir}/values.yaml"]
 texts = {p: open(p).read() for p in paths}
 for pin in pins:
     name, tag = pin.split('=', 1)
-    pattern = rf'^(\s*(?:tag|version):\s*)"[^"]*"(\s*# kawa-release: {re.escape(name)})$'
+    pattern = rf'^(\s*tag:\s*)"[^"]*"(\s*# kawa-release: {re.escape(name)})$'
     found = 0
     for p in paths:
         texts[p], n = re.subn(pattern, rf'\g<1>"{tag}"\g<2>', texts[p], flags=re.M)

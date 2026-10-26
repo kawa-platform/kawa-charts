@@ -37,7 +37,7 @@ spec:
       {{- end }}
       containers:
         - name: gateway
-          image: "{{ $gw.image.repository }}:{{ $gw.image.tag | default .Chart.AppVersion }}"
+          image: "{{ $gw.image.repository }}:{{ required "gateway.image.tag is required" $gw.image.tag }}"
           imagePullPolicy: {{ $gw.image.pullPolicy }}
           {{- with $gw.securityContext }}
           securityContext:
