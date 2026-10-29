@@ -3,7 +3,7 @@ name: kawa
 description: Kawa, a Kafka gateway, with Kawa Studio, its admin UI. Pins each component's image.
 type: application
 # Set by scripts/release.sh (make release) on every release.
-version: 0.1.0-rc.5
+version: 0.1.0-rc.6
 keywords:
   - kafka
   - gateway
