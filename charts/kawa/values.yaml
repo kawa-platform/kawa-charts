@@ -33,7 +33,7 @@ gateway:
 
   image:
     repository: ghcr.io/kawa-platform/kawa-gateway
-    tag: "0.1.0-rc.3"  # kawa-release: gateway
+    tag: "0.1.0"  # kawa-release: gateway
     pullPolicy: IfNotPresent
 
   # Resets the bootstrap admin user's password to the one in config on start (KAWA_ADMIN_RESET=true).
@@ -97,7 +97,7 @@ studio:
 
   image:
     repository: ghcr.io/kawa-platform/kawa-studio
-    tag: "0.1.0-rc.3"  # kawa-release: studio
+    tag: "0.1.0"  # kawa-release: studio
     pullPolicy: IfNotPresent
 
   # Where Studio's nginx proxies /api/ to (with the /api prefix stripped), passed to the image as
