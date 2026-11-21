@@ -48,33 +48,24 @@ app.kubernetes.io/component: studio
 {{- printf "%s.%s.svc.cluster.local" (include "kawa.gateway.fullname" .) .Release.Namespace }}
 {{- end }}
 
-{{/* The Kafka port: the first listener in gateway.config (the gateway's default 9092), or the Service value with existingConfigMap. */}}
+{{/* The Kafka port: the first listener in gateway.config (the gateway's default 9092). */}}
 {{- define "kawa.gateway.kafkaPort" -}}
-{{- if .Values.gateway.existingConfigMap -}}
-{{- .Values.gateway.service.kafkaPort -}}
-{{- else -}}
 {{- $listeners := (.Values.gateway.config | default dict).listeners | default list -}}
 {{- if $listeners -}}
 {{- (first $listeners).port | default 9092 -}}
 {{- else -}}
 9092
 {{- end -}}
-{{- end -}}
 {{- end }}
 
-{{/* The admin port: admin.port in gateway.config (the gateway's default 8080), or the Service value with existingConfigMap. */}}
+{{/* The admin port: admin.port in gateway.config (the gateway's default 8080). */}}
 {{- define "kawa.gateway.adminPort" -}}
-{{- if .Values.gateway.existingConfigMap -}}
-{{- .Values.gateway.service.adminPort -}}
-{{- else -}}
 {{- ((.Values.gateway.config | default dict).admin | default dict).port | default 8080 -}}
-{{- end -}}
 {{- end }}
 
-{{/* "true" when gateway.config turns the admin API on (admin.enabled; the gateway's default is off), else "".
-With existingConfigMap the chart cannot read the config, so it is always "". */}}
+{{/* "true" when gateway.config turns the admin API on (admin.enabled; the gateway's default is off), else "". */}}
 {{- define "kawa.gateway.adminEnabled" -}}
-{{- if and (not .Values.gateway.existingConfigMap) ((.Values.gateway.config | default dict).admin | default dict).enabled -}}
+{{- if ((.Values.gateway.config | default dict).admin | default dict).enabled -}}
 true
 {{- end -}}
 {{- end }}

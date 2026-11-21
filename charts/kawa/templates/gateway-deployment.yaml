@@ -20,9 +20,7 @@ spec:
         {{- toYaml . | nindent 8 }}
         {{- end }}
       annotations:
-        {{- if not $gw.existingConfigMap }}
         checksum/config: {{ include "kawa.gateway.config" . | sha256sum }}
-        {{- end }}
         {{- with $gw.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -105,7 +103,7 @@ spec:
       volumes:
         - name: config
           configMap:
-            name: {{ $gw.existingConfigMap | default (include "kawa.gateway.fullname" .) }}
+            name: {{ include "kawa.gateway.fullname" . }}
         - name: tmp
           emptyDir: {}
         {{- with $gw.extraVolumes }}

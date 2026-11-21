@@ -19,15 +19,21 @@ through a ConfigMap, so the gateway docs apply as written. Pods restart when it 
 - **Ports**: the Service and container ports follow the config, from `listeners[0].port` and `admin.port`
   (defaults 9092 and 8080). Only the first listener is exposed by the Service.
 - **Probes**: with `admin.enabled: true`, the readiness probe calls `GET /health/ready` on the admin port, so a
-  pod whose view of the Kafka cluster is stale leaves the Service until it recovers. Otherwise, and always with
-  `existingConfigMap`, it is a TCP check on the Kafka port. Liveness is always a TCP check on the Kafka port.
+  pod whose view of the Kafka cluster is stale leaves the Service until it recovers. Otherwise it is a TCP check
+  on the Kafka port. Liveness is always a TCP check on the Kafka port.
 - **Studio**: `KAWA_API_UPSTREAM` points the image's nginx `/api/` at the gateway's admin Service (prefix stripped).
 
-## Choosing a config source
+## Keeping the config in its own file
 
-- `gateway.config`: the chart renders the file from values.
-- `gateway.existingConfigMap`: use a ConfigMap you manage, with a `config.yaml` key. The chart cannot read that
-  file, so set `gateway.service.kafkaPort` and `adminPort` to match it. The readiness probe stays a TCP check.
+`gateway.config` is the only config source: the chart reads it to set ports and probes. To keep the gateway config
+apart from the rest of your values, nest it under `gateway.config` in a file of its own and pass both:
+
+```bash
+helm install kawa ./charts/kawa -f my-values.yaml -f gateway-config.yaml
+```
+
+`gateway.existingConfigMap` and `gateway.service.kafkaPort`/`adminPort` were removed in 0.2.0; the install fails
+if they are still set.
 
 ## Reaching the admin API from Studio
 

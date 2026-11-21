@@ -15,11 +15,10 @@ gateway:
   # /etc/kawa/config.yaml. Use ${VAR} or ${VAR:-default} for values from the environment: the chart
   # provides KAWA_ADMIN_PASSWORD and KAWA_SIGNING_KEY (see gateway.secrets), and gateway.extraEnv
   # adds more. The chart sets one key itself: advertised.host, to the Service's DNS name when unset.
+  # The Service and container ports follow listeners[0].port and admin.port (defaults 9092 and 8080).
+  # To keep the config in a file of its own, put it under gateway.config in a separate values file
+  # and pass that with -f.
   config: { }
-
-  # Use an existing ConfigMap with a config.yaml key instead of gateway.config. The chart cannot
-  # read that file, so the ports come from gateway.service.kafkaPort and adminPort below.
-  existingConfigMap: ""
 
   # Secrets injected as KAWA_ADMIN_PASSWORD and KAWA_SIGNING_KEY. Empty values are generated on
   # first install and kept across upgrades. An existing Secret needs the keys admin-password and
@@ -50,10 +49,6 @@ gateway:
 
   service:
     type: ClusterIP
-    # Used only with existingConfigMap. Otherwise the ports are read from gateway.config
-    # (listeners[0].port and admin.port, with the gateway's defaults 9092 and 8080).
-    kafkaPort: 9092
-    adminPort: 8080
     annotations: { }
     # Only for type LoadBalancer / NodePort
     loadBalancerIP: ""
