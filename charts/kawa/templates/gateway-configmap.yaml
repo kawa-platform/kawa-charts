@@ -1,4 +1,10 @@
-{{- if and .Values.gateway.enabled (not .Values.gateway.existingConfigMap) }}
+{{- if .Values.gateway.enabled }}
+{{- if .Values.gateway.existingConfigMap }}
+{{- fail "gateway.existingConfigMap was removed: put the gateway's config.yaml under gateway.config, in a separate values file if you want it on its own" }}
+{{- end }}
+{{- if or (hasKey .Values.gateway.service "kafkaPort") (hasKey .Values.gateway.service "adminPort") }}
+{{- fail "gateway.service.kafkaPort and adminPort were removed: the ports come from gateway.config (listeners[0].port and admin.port)" }}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
