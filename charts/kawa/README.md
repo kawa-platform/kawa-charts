@@ -18,13 +18,16 @@ through a ConfigMap, so the gateway docs apply as written. Pods restart when it 
 - **advertised.host**: when the config leaves it out, the gateway advertises its Service's cluster DNS name.
 - **Ports**: the Service and container ports follow the config, from `listeners[0].port` and `admin.port`
   (defaults 9092 and 8080). Only the first listener is exposed by the Service.
+- **Probes**: with `admin.enabled: true`, the readiness probe calls `GET /health/ready` on the admin port, so a
+  pod whose view of the Kafka cluster is stale leaves the Service until it recovers. Otherwise, and always with
+  `existingConfigMap`, it is a TCP check on the Kafka port. Liveness is always a TCP check on the Kafka port.
 - **Studio**: `KAWA_API_UPSTREAM` points the image's nginx `/api/` at the gateway's admin Service (prefix stripped).
 
 ## Choosing a config source
 
 - `gateway.config`: the chart renders the file from values.
 - `gateway.existingConfigMap`: use a ConfigMap you manage, with a `config.yaml` key. The chart cannot read that
-  file, so set `gateway.service.kafkaPort` and `adminPort` to match it.
+  file, so set `gateway.service.kafkaPort` and `adminPort` to match it. The readiness probe stays a TCP check.
 
 ## Reaching the admin API from Studio
 

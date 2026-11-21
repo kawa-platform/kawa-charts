@@ -71,6 +71,14 @@ app.kubernetes.io/component: studio
 {{- end -}}
 {{- end }}
 
+{{/* "true" when gateway.config turns the admin API on (admin.enabled; the gateway's default is off), else "".
+With existingConfigMap the chart cannot read the config, so it is always "". */}}
+{{- define "kawa.gateway.adminEnabled" -}}
+{{- if and (not .Values.gateway.existingConfigMap) ((.Values.gateway.config | default dict).admin | default dict).enabled -}}
+true
+{{- end -}}
+{{- end }}
+
 {{/* The gateway's config.yaml: gateway.config as written, with advertised.host set when it is not. */}}
 {{- define "kawa.gateway.config" -}}
 {{- $cfg := deepCopy (.Values.gateway.config | default dict) }}
