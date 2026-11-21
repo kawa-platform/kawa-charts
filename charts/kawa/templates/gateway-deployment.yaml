@@ -70,9 +70,18 @@ spec:
             {{- with $gw.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
+          # Readiness asks the gateway whether its cluster view is fresh (503 when it is stale); that
+          # route lives on the admin API, so without it only the Kafka port is checked. Liveness stays a
+          # TCP check: a cluster outage must take pods out of service, not restart them all.
           readinessProbe:
+            {{- if include "kawa.gateway.adminEnabled" . }}
+            httpGet:
+              path: /health/ready
+              port: admin
+            {{- else }}
             tcpSocket:
               port: kafka
+            {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
           livenessProbe:
