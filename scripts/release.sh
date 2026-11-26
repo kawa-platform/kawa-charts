@@ -8,7 +8,8 @@
 #
 #   make release
 #
-# Component checkouts are expected next to this repo (override with KAWA_ROOT).
+# Component repos are bare clones with one worktree per branch, found under KAWA_ROOT (default: the
+# workspace root) as kawa-<repo>.git/<worktree>. The worktree with main checked out is used.
 # charts/kawa/values.yaml pins each image on one marked line, which is what gets rewritten:
 #   tag: "0.1.0"  # kawa-release: gateway
 #
@@ -131,6 +132,14 @@ check_repo() {
 # has_tag <dir> <tag>
 has_tag() { git -C "$1" rev-parse -q --verify "refs/tags/$2" >/dev/null; }
 
+# worktree <repo>: the path of the kawa-<repo> worktree with main checked out. Fails when there is none.
+worktree() {
+  local path
+  path="$(git --git-dir="$KAWA_ROOT/kawa-$1.git/.bare" worktree list --porcelain 2>/dev/null \
+    | awk '/^worktree /{ p = substr($0, 10) } $0 == "branch refs/heads/main" { print p }')"
+  [[ -n $path ]] && printf '%s\n' "$path"
+}
+
 # pin_of <component>: the image tag charts/kawa pins for <component>.
 pin_of() {
   sed -nE "s/.*tag:[[:space:]]*\"([^\"]*)\"[[:space:]]*# kawa-release: $1\$/\1/p" "${PIN_FILES[@]}"
@@ -200,7 +209,7 @@ wait_release() {
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
-KAWA_ROOT="${KAWA_ROOT:-$(cd "$root/.." && pwd)}"
+KAWA_ROOT="${KAWA_ROOT:-$(cd "$root/../.." && pwd)}"
 
 gh auth status >/dev/null 2>&1 || die "gh is not logged in; run gh auth login"
 [[ -f $CHART_DIR/Chart.yaml ]] || die "$CHART_DIR/Chart.yaml not found"
@@ -212,9 +221,8 @@ done
 info "🔄 Fetching tags..."
 git fetch -q origin main --tags
 for c in "${COMPONENTS[@]}"; do
-  dir="$KAWA_ROOT/kawa-$c"
-  [[ -d $dir ]] || die "no checkout of kawa-$c at $dir (set KAWA_ROOT)"
-info "🔄 Fetching ${c} tags..."
+  dir="$(worktree "$c")" || die "no kawa-$c worktree on main under $KAWA_ROOT/kawa-$c.git (set KAWA_ROOT)"
+  info "🔄 Fetching ${c} tags..."
   git -C "$dir" fetch -q origin main --tags
 done
 
@@ -224,7 +232,7 @@ SELECTED=(); NEXT=(); LATEST=()   # components to release
 PINNED=(); PIN_TO=()              # components only re-pinned to an existing version
 operator_version=''               # the operator version for kawa-demo: released or picked with [u]se
 for c in "${COMPONENTS[@]}"; do
-  dir="$KAWA_ROOT/kawa-$c"
+  dir="$(worktree "$c")"
   read -r latest count <<<"$(unreleased "$dir" 'v[0-9]*')"
   next_rc=''
   if [[ $latest == *-rc* ]]; then next_rc="v$(versions "$dir" v | next_version rc 1)"; fi
@@ -251,7 +259,7 @@ chart_tag="$CHART-$chart_next"
 # 🧪 Check everything before pushing anything.
 check_repo "$root" "$ORG/kawa-charts"
 for ((i = 0; i < ${#SELECTED[@]}; i++)); do
-  dir="$KAWA_ROOT/kawa-${SELECTED[$i]}"
+  dir="$(worktree "${SELECTED[$i]}")"
   check_repo "$dir" "$ORG/kawa-${SELECTED[$i]}"
   if has_tag "$dir" "v${NEXT[$i]}"; then die "tag v${NEXT[$i]} already exists in kawa-${SELECTED[$i]}"; fi
 done
@@ -270,7 +278,7 @@ below() {
 printf '\n%s📋 Release plan%s\n' "$MAGENTA$BOLD" "$RESET"
 for ((i = 0; i < ${#SELECTED[@]}; i++)); do
   printf '   %-14s %s → %s%s%s%s\n' "kawa-${SELECTED[$i]}" "${LATEST[$i]}" "$GREEN$BOLD" "v${NEXT[$i]}" "$RESET" \
-    "$(below "$KAWA_ROOT/kawa-${SELECTED[$i]}" v "${NEXT[$i]}")"
+    "$(below "$(worktree "${SELECTED[$i]}")" v "${NEXT[$i]}")"
 done
 for ((i = 0; i < ${#PINNED[@]}; i++)); do
   if in_chart "${PINNED[$i]}"; then
@@ -293,7 +301,7 @@ RESULTS=()
 for ((i = 0; i < ${#SELECTED[@]}; i++)); do
   c="${SELECTED[$i]}"
   printf '\n%s🏷️  Releasing kawa-%s v%s%s\n' "$BLUE$BOLD" "$c" "${NEXT[$i]}" "$RESET"
-  make -s -C "$KAWA_ROOT/kawa-$c" release VERSION="${NEXT[$i]}"
+  make -s -C "$(worktree "$c")" release VERSION="${NEXT[$i]}"
   wait_release "$ORG/kawa-$c" "v${NEXT[$i]}"
 done
 
@@ -342,8 +350,8 @@ printf '\n%s🎉 Released%s\n' "$GREEN$BOLD" "$RESET"
 for r in "${RESULTS[@]}"; do printf '   %s\n' "$r"; done
 
 # 🎪 Optionally carry the chart's pins over to kawa-demo/versions.env.
-demo="$KAWA_ROOT/kawa-demo"
-if [[ -f $demo/versions.env ]]; then
+demo="$(worktree demo)" || demo=''
+if [[ -n $demo && -f $demo/versions.env ]]; then
   printf '\n%s🎪 Update kawa-demo versions.env with these versions, commit and push? [y/N] %s' "$MAGENTA$BOLD" "$RESET"
   read -r ok
   if [[ $ok == y || $ok == Y ]]; then update_demo "$demo"; fi
